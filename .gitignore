@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+npm-debug.log*
+
+# Qoder cache
+.qoder/
+
+# Vite leftovers
+index.html
+vite.config.js
+eslint.config.js
+screenshot-landing.png
+
+# Old Vite source (backup only)
+src-vite-backup/
+src-old/
