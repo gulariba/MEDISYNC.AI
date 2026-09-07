@@ -2,19 +2,21 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Avatar from '@/components/ui/avatar';
-import { chatHistory, chatConversations } from '@/lib/mock-data';
 import { chatService } from '@/services/api';
-import { Bot, Send, Plus, Search, MessageSquare, Sparkles, Paperclip, Mic, AlertTriangle, Clock } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { Bot, Send, Plus, Search, MessageSquare, Sparkles, Paperclip, Mic, AlertTriangle, Clock, Loader2 } from 'lucide-react';
 
 export default function AIAssistant() {
-  const [messages, setMessages] = useState(chatHistory);
+  const { user } = useAuth();
+  const [messages, setMessages] = useState([{ id: 'welcome', role: 'assistant', content: `Hi ${user?.name?.split(' ')[0] || 'there'}! I'm your MediSync healthcare assistant. How can I help you today?`, timestamp: new Date().toISOString() }]);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
-  const [conversations] = useState(chatConversations);
+  const [conversations, setConversations] = useState([]);
   const [searchConvo, setSearchConvo] = useState('');
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, typing]);
+  useEffect(() => { chatService.getConversations().then(setConversations).catch(() => {}); }, []);
 
   const send = async () => {
     if (!input.trim()) return;
@@ -22,9 +24,13 @@ export default function AIAssistant() {
     setMessages(prev => [...prev, msg]);
     setInput('');
     setTyping(true);
-    const resp = await chatService.sendMessage(msg.content);
+    try {
+      const resp = await chatService.sendMessage(msg.content);
+      setMessages(prev => [...prev, { ...resp, id: (Date.now() + 1).toString() }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: 'Sorry, I encountered an error. Please try again.', timestamp: new Date().toISOString() }]);
+    }
     setTyping(false);
-    setMessages(prev => [...prev, { ...resp, id: (Date.now() + 1).toString() }]);
   };
 
   const filteredConvos = conversations.filter(c => c.title.toLowerCase().includes(searchConvo.toLowerCase()));
@@ -70,7 +76,7 @@ export default function AIAssistant() {
               <motion.div key={msg.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 {msg.role === 'assistant' ? (
                   <div className="w-8 h-8 rounded-xl btn-gradient flex items-center justify-center shrink-0 text-white text-[10px] font-bold">AI</div>
-                ) : (<Avatar name="Sarah Khan" size="sm" />)}
+                ) : (<Avatar name={user?.name || 'User'} size="sm" />)}
                 <div className={`max-w-[70%] ${msg.role === 'user' ? 'text-right' : ''}`}>
                   <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'btn-gradient text-white rounded-tr-sm' : 'surface-elevated text-surface-700 dark:text-surface-200 rounded-tl-sm'}`}>{msg.content}</div>
                   <p className="text-[10px] text-surface-400 mt-1 px-1">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>

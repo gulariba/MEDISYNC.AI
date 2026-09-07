@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Card from '@/components/ui/card';
 import Badge from '@/components/ui/badge';
@@ -7,24 +7,50 @@ import Button from '@/components/ui/button';
 import Tabs from '@/components/ui/tabs';
 import Modal from '@/components/ui/modal';
 import PageHeader from '@/components/layout/page-header';
-import { reports } from '@/lib/mock-data';
-import { FileText, Search, Sparkles, AlertTriangle, Download } from 'lucide-react';
-
-const myReports = reports.filter(r => r.patientId === 'p1');
+import { reportService } from '@/services/api';
+import { FileText, Search, Sparkles, AlertTriangle, Download, Loader2 } from 'lucide-react';
 
 export default function Reports() {
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [showAI, setShowAI] = useState(true);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [summarizing, setSummarizing] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        if (search.length > 0) {
+          const results = await reportService.search(search);
+          setReports(results);
+        } else {
+          const data = await reportService.getAll();
+          setReports(data);
+        }
+      } catch { /* empty */ }
+      setLoading(false);
+    })();
+  }, [search]);
 
   const tabs = [
-    { id: 'all', label: 'All', count: myReports.length },
-    { id: 'Blood', label: 'Blood', count: myReports.filter(r => r.type === 'Blood').length },
-    { id: 'Imaging', label: 'Imaging', count: myReports.filter(r => r.type === 'Imaging').length },
-    { id: 'ECG', label: 'ECG', count: myReports.filter(r => r.type === 'ECG').length },
+    { id: 'all', label: 'All', count: reports.length },
+    { id: 'Blood', label: 'Blood', count: reports.filter(r => r.type === 'Blood').length },
+    { id: 'Imaging', label: 'Imaging', count: reports.filter(r => r.type === 'Imaging').length },
+    { id: 'ECG', label: 'ECG', count: reports.filter(r => r.type === 'ECG').length },
   ];
-  const filtered = myReports.filter(r => tab === 'all' || r.type === tab).filter(r => r.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = reports.filter(r => tab === 'all' || r.type === tab);
+
+  const handleSummarize = async (reportId) => {
+    setSummarizing(true);
+    try {
+      const result = await reportService.generateSummary(reportId);
+      setSelected(prev => prev ? { ...prev, aiSummary: result.ai_summary, ai_summary: result.ai_summary } : prev);
+      setReports(prev => prev.map(r => r.id === reportId ? { ...r, aiSummary: result.ai_summary } : r));
+    } catch { /* ignore */ }
+    setSummarizing(false);
+  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -34,7 +60,9 @@ export default function Reports() {
         <Tabs tabs={tabs} active={tab} onChange={setTab} />
       </div>
       <div className="grid gap-3">
-        {filtered.map((r, i) => (
+        {loading ? (
+          <div className="text-center py-16"><Loader2 size={24} className="animate-spin text-surface-400 mx-auto" /></div>
+        ) : filtered.map((r, i) => (
           <motion.div key={r.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
             <Card className="p-5 cursor-pointer" hover onClick={() => setSelected(r)}>
               <div className="flex items-center gap-4">
@@ -46,7 +74,7 @@ export default function Reports() {
             </Card>
           </motion.div>
         ))}
-        {filtered.length === 0 && <div className="text-center py-16 text-surface-400">No reports found.</div>}
+        {!loading && filtered.length === 0 && <div className="text-center py-16 text-surface-400">No reports found.</div>}
       </div>
 
       <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.name} size="xl">
@@ -68,11 +96,14 @@ export default function Reports() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-sm font-semibold text-surface-800 dark:text-white flex items-center gap-2"><Sparkles size={16} className="text-accent-500" /> AI Summary</h4>
-                <button onClick={() => setShowAI(!showAI)} className="text-xs font-medium text-primary-500 hover:underline">{showAI ? 'Hide' : 'Show'}</button>
+                <div className="flex items-center gap-2">
+                  {!selected.aiSummary && <Button variant="secondary" size="sm" onClick={() => handleSummarize(selected.id)} disabled={summarizing}>{summarizing ? 'Generating...' : 'Generate AI Summary'}</Button>}
+                  <button onClick={() => setShowAI(!showAI)} className="text-xs font-medium text-primary-500 hover:underline">{showAI ? 'Hide' : 'Show'}</button>
+                </div>
               </div>
               {showAI ? (
                 <div className="bg-primary-50/60 dark:bg-primary-500/10 rounded-xl p-5 space-y-3">
-                  <p className="text-sm text-surface-700 dark:text-surface-200 leading-relaxed">{selected.aiSummary}</p>
+                  <p className="text-sm text-surface-700 dark:text-surface-200 leading-relaxed">{selected.aiSummary || 'No summary available yet. Click "Generate AI Summary" to create one.'}</p>
                   <div className="flex items-start gap-2 pt-2 border-t border-primary-200/40 dark:border-primary-800/30"><AlertTriangle size={14} className="text-warning-500 shrink-0 mt-0.5" /><p className="text-xs text-surface-400 leading-relaxed">AI-generated summaries are for informational support and must be reviewed by a qualified healthcare professional.</p></div>
                 </div>
               ) : (<div className="bg-surface-100 dark:bg-surface-800/40 rounded-xl p-8 text-center text-surface-400 text-sm">AI summary is hidden. Click &quot;Show&quot; to view.</div>)}

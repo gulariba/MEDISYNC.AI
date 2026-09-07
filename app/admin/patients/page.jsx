@@ -1,15 +1,25 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Card from '@/components/ui/card';
 import Badge from '@/components/ui/badge';
 import Avatar from '@/components/ui/avatar';
 import PageHeader from '@/components/layout/page-header';
-import { patients } from '@/lib/mock-data';
-import { Search } from 'lucide-react';
+import { adminService } from '@/services/api';
+import { Search, Loader2 } from 'lucide-react';
 
 export default function AdminPatients() {
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try { setPatients(await adminService.getPatients()); } catch { /* empty */ }
+      setLoading(false);
+    })();
+  }, []);
+
   const filtered = patients.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -31,14 +41,19 @@ export default function AdminPatients() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-100 dark:divide-surface-800">
-              {filtered.map(p => (
+              {loading ? (
+                <tr><td colSpan={4} className="text-center py-12"><Loader2 size={24} className="animate-spin text-surface-400 mx-auto" /></td></tr>
+              ) : filtered.map(p => (
                 <tr key={p.id} className="hover:bg-surface-50 dark:hover:bg-surface-800/40 transition-colors">
                   <td className="px-6 py-3.5 flex items-center gap-3"><Avatar name={p.name} size="sm" /><span className="font-medium text-surface-800 dark:text-white">{p.name}</span></td>
-                  <td className="px-6 py-3.5 text-surface-500">{p.email}</td>
-                  <td className="px-6 py-3.5"><Badge variant="primary">{p.bloodGroup}</Badge></td>
-                  <td className="px-6 py-3.5 text-surface-500">{p.gender}</td>
+                  <td className="px-6 py-3.5 text-surface-500">{p.email || `Patient #${p.id}`}</td>
+                  <td className="px-6 py-3.5"><Badge variant="primary">{p.bloodGroup || '—'}</Badge></td>
+                  <td className="px-6 py-3.5 text-surface-500">{p.gender || '—'}</td>
                 </tr>
               ))}
+              {!loading && filtered.length === 0 && (
+                <tr><td colSpan={4} className="text-center py-12 text-surface-400">No patients found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

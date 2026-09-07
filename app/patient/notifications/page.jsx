@@ -1,12 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Card from '@/components/ui/card';
 import Tabs from '@/components/ui/tabs';
 import Button from '@/components/ui/button';
 import PageHeader from '@/components/layout/page-header';
-import { notifications } from '@/lib/mock-data';
-import { Bell, Calendar, FileText, Clock, MessageCircle, Settings, Trash2, CheckCircle2 } from 'lucide-react';
+import { notificationService } from '@/services/api';
+import { Bell, Calendar, FileText, Clock, MessageCircle, Settings, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 
 const iconMap = { appointment: Calendar, report: FileText, queue: Clock, doctor: MessageCircle, system: Settings };
 const colorMap = {
@@ -18,12 +18,34 @@ const colorMap = {
 };
 
 export default function Notifications() {
-  const [items, setItems] = useState(notifications);
+  const [items, setItems] = useState([]);
   const [tab, setTab] = useState('all');
-  const tabs = [{ id: 'all', label: 'All', count: items.length }, { id: 'unread', label: 'Unread', count: items.filter(n => !n.read).length }];
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    try {
+      const res = await notificationService.getAll();
+      setItems(res.items || []);
+    } catch { /* empty */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const tabs = [
+    { id: 'all', label: 'All', count: items.length },
+    { id: 'unread', label: 'Unread', count: items.filter(n => !n.read).length },
+  ];
   const filtered = items.filter(n => tab === 'unread' ? !n.read : true);
-  const markRead = (id) => setItems(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  const markAllRead = () => setItems(prev => prev.map(n => ({ ...n, read: true })));
+
+  const markRead = async (id) => {
+    try { await notificationService.markAsRead(id); } catch { /* ignore */ }
+    setItems(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+  const markAllRead = async () => {
+    try { await notificationService.markAllAsRead(); } catch { /* ignore */ }
+    setItems(prev => prev.map(n => ({ ...n, read: true })));
+  };
   const remove = (id) => setItems(prev => prev.filter(n => n.id !== id));
 
   return (
@@ -31,7 +53,9 @@ export default function Notifications() {
       <PageHeader title="Notifications" subtitle="Stay updated with your healthcare" action={<Button variant="secondary" size="sm" onClick={markAllRead}><CheckCircle2 size={14} /> Mark all read</Button>} />
       <div className="mb-6"><Tabs tabs={tabs} active={tab} onChange={setTab} /></div>
       <div className="grid gap-2">
-        {filtered.map((n, i) => {
+        {loading ? (
+          <div className="text-center py-16"><Loader2 size={24} className="animate-spin text-surface-400 mx-auto" /></div>
+        ) : filtered.map((n, i) => {
           const Icon = iconMap[n.type] || Bell;
           const style = colorMap[n.type] || colorMap.system;
           return (
@@ -53,7 +77,7 @@ export default function Notifications() {
             </motion.div>
           );
         })}
-        {filtered.length === 0 && <div className="text-center py-16 text-surface-400">No notifications.</div>}
+        {!loading && filtered.length === 0 && <div className="text-center py-16 text-surface-400">No notifications.</div>}
       </div>
     </div>
   );

@@ -1,10 +1,12 @@
 'use client';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Card from '@/components/ui/card';
 import Badge from '@/components/ui/badge';
 import PageHeader from '@/components/layout/page-header';
-import { adminStats, appointmentsOverTime, patientRegistrations, queueActivityData, appointments } from '@/lib/mock-data';
-import { Users, Stethoscope, Calendar, Activity } from 'lucide-react';
+import { adminService } from '@/services/api';
+import { appointmentsOverTime, patientRegistrations, queueActivityData } from '@/lib/mock-data';
+import { Users, Stethoscope, Calendar, Activity, Loader2 } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const fadeIn = (i = 0) => ({
@@ -14,33 +16,57 @@ const fadeIn = (i = 0) => ({
 });
 
 export default function AdminDashboard() {
+  const [dashboard, setDashboard] = useState(null);
+  const [recentAppts, setRecentAppts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [d, a] = await Promise.allSettled([
+          adminService.getDashboard(),
+          adminService.getAppointments(),
+        ]);
+        if (d.status === 'fulfilled') setDashboard(d.value);
+        if (a.status === 'fulfilled') setRecentAppts(a.value.slice(0, 5));
+      } catch { /* use fallbacks */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  const stats = dashboard || { total_patients: 0, total_doctors: 0, total_appointments: 0, active_appointments: 0, total_reports: 0, pending_reports: 0 };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader title="Admin Dashboard" subtitle="System overview and analytics" />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { icon: Users, label: 'Total Patients', value: adminStats.totalPatients.toLocaleString(), sub: '+45 this month', iconColor: 'text-primary-500', bg: 'bg-primary-50 dark:bg-primary-500/10', trend: '+12%' },
-          { icon: Stethoscope, label: 'Doctors', value: adminStats.totalDoctors, sub: '5 specialties', iconColor: 'text-accent-500', bg: 'bg-accent-50 dark:bg-accent-50/10', trend: '+2' },
-          { icon: Calendar, label: "Today's Appts", value: adminStats.todayAppointments, sub: '12 completed', iconColor: 'text-success-500', bg: 'bg-success-50 dark:bg-success-50/10', trend: '+8%' },
-          { icon: Activity, label: 'Active Queues', value: adminStats.activeQueues, sub: 'Avg 5 min wait', iconColor: 'text-warning-500', bg: 'bg-warning-50 dark:bg-warning-50/10', trend: '-3%' },
-        ].map((s, i) => (
-          <motion.div key={s.label} {...fadeIn(i)}>
-            <Card className="p-5" hover>
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center`}>
-                  <s.icon size={18} className={s.iconColor} />
+      {loading ? (
+        <div className="text-center py-12"><Loader2 size={28} className="animate-spin text-surface-400 mx-auto" /></div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { icon: Users, label: 'Total Patients', value: stats.total_patients.toLocaleString(), sub: `${stats.total_patients} registered`, iconColor: 'text-primary-500', bg: 'bg-primary-50 dark:bg-primary-500/10', trend: 'active' },
+            { icon: Stethoscope, label: 'Doctors', value: stats.total_doctors, sub: 'on staff', iconColor: 'text-accent-500', bg: 'bg-accent-50 dark:bg-accent-50/10', trend: 'active' },
+            { icon: Calendar, label: 'Total Appointments', value: stats.total_appointments, sub: `${stats.active_appointments} scheduled`, iconColor: 'text-success-500', bg: 'bg-success-50 dark:bg-success-50/10', trend: 'active' },
+            { icon: Activity, label: 'Reports', value: stats.total_reports, sub: `${stats.pending_reports} pending`, iconColor: 'text-warning-500', bg: 'bg-warning-50 dark:bg-warning-50/10', trend: 'active' },
+          ].map((s, i) => (
+            <motion.div key={s.label} {...fadeIn(i)}>
+              <Card className="p-5" hover>
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center`}>
+                    <s.icon size={18} className={s.iconColor} />
+                  </div>
+                  <Badge variant="success">{s.trend}</Badge>
                 </div>
-                <Badge variant={s.trend.startsWith('+') ? 'success' : 'danger'}>{s.trend}</Badge>
-              </div>
-              <p className="text-2xl font-bold text-surface-800 dark:text-white">{s.value}</p>
-              <p className="text-xs text-surface-400">{s.label}</p>
-              <p className="text-xs text-surface-400 mt-0.5">{s.sub}</p>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+                <p className="text-2xl font-bold text-surface-800 dark:text-white">{s.value}</p>
+                <p className="text-xs text-surface-400">{s.label}</p>
+                <p className="text-xs text-surface-400 mt-0.5">{s.sub}</p>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid lg:grid-cols-3 gap-6">
@@ -117,7 +143,9 @@ export default function AdminDashboard() {
               <h3 className="font-semibold text-surface-900 dark:text-white">Recent Appointments</h3>
             </div>
             <div className="divide-y divide-surface-100 dark:divide-surface-800">
-              {appointments.slice(0, 5).map(a => (
+              {recentAppts.length === 0 && !loading ? (
+                <div className="px-6 py-8 text-center text-surface-400">No appointments yet.</div>
+              ) : recentAppts.map(a => (
                 <div key={a.id} className="px-6 py-3 flex items-center gap-4">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-surface-800 dark:text-white truncate">{a.patientName} → {a.doctorName}</p>

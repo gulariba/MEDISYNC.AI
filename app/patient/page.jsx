@@ -1,13 +1,14 @@
 'use client';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Card from '@/components/ui/card';
 import Badge from '@/components/ui/badge';
 import Avatar from '@/components/ui/avatar';
-import { Calendar, Clock, FileText, Bot, ArrowRight, Activity, Pill, Send } from 'lucide-react';
-import { appointments, reports, queueData, activityTimeline } from '@/lib/mock-data';
-import { useState } from 'react';
+import { Calendar, Clock, FileText, Bot, ArrowRight, Activity, Pill, Send, Loader2 } from 'lucide-react';
+import { appointmentService, reportService, queueService, prescriptionService } from '@/services/api';
+import { activityTimeline as fallbackTimeline, queueData as fallbackQueue } from '@/lib/mock-data';
 
 const fadeIn = (i = 0) => ({
   initial: { opacity: 0, y: 12 },
@@ -19,14 +20,38 @@ export default function PatientDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
-  const myAppts = appointments.filter(a => a.patientId === 'p1' && a.status === 'upcoming');
-  const myReports = reports.filter(r => r.patientId === 'p1');
-  const nextAppt = myAppts[0];
+  const [myAppts, setMyAppts] = useState([]);
+  const [myReports, setMyReports] = useState([]);
+  const [queueInfo, setQueueInfo] = useState(fallbackQueue);
+  const [rxCount, setRxCount] = useState(0);
+  const [timeline, setTimeline] = useState(fallbackTimeline);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [appts, reps, q, rx] = await Promise.allSettled([
+          appointmentService.getAll(),
+          reportService.getAll(),
+          queueService.getStatus(),
+          prescriptionService.getAll(),
+        ]);
+        if (appts.status === 'fulfilled') setMyAppts(appts.value);
+        if (reps.status === 'fulfilled') setMyReports(reps.value);
+        if (q.status === 'fulfilled' && q.value?.queue?.length) setQueueInfo(q.value);
+        if (rx.status === 'fulfilled') setRxCount(rx.value.filter(r => r.status === 'active').length);
+      } catch { /* use fallbacks */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  const upcoming = myAppts.filter(a => a.status === 'upcoming');
+  const nextAppt = upcoming[0];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <motion.div {...fadeIn()}>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-surface-900 dark:text-white tracking-tight">Good morning, {user?.name?.split(' ')[0] || 'Sarah'}.</h1>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-surface-900 dark:text-white tracking-tight">Good morning, {user?.name?.split(' ')[0] || 'User'}.</h1>
         <p className="text-surface-500 dark:text-surface-400 mt-1">Here&apos;s your health overview for today.</p>
       </motion.div>
 
@@ -56,9 +81,9 @@ export default function PatientDashboard() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { icon: Calendar, label: 'Next Appointment', value: nextAppt ? nextAppt.date : 'None', sub: nextAppt?.doctorName, color: 'text-primary-500', bg: 'bg-primary-50 dark:bg-primary-500/10' },
-          { icon: Clock, label: 'Queue Position', value: `#${queueData.yourPosition}`, sub: `~${queueData.estimatedWait} min`, color: 'text-accent-500', bg: 'bg-accent-50 dark:bg-accent-50/10' },
-          { icon: FileText, label: 'Reports', value: myReports.length, sub: 'All reviewed', color: 'text-success-500', bg: 'bg-success-50 dark:bg-success-50/10' },
-          { icon: Pill, label: 'Active Rx', value: '3', sub: 'All on track', color: 'text-warning-500', bg: 'bg-warning-50 dark:bg-warning-50/10' },
+          { icon: Clock, label: 'Queue Position', value: queueInfo.yourPosition ? `#${queueInfo.yourPosition}` : '—', sub: queueInfo.estimatedWait ? `~${queueInfo.estimatedWait} min` : 'No queue', color: 'text-accent-500', bg: 'bg-accent-50 dark:bg-accent-50/10' },
+          { icon: FileText, label: 'Reports', value: myReports.length || '—', sub: 'All reviewed', color: 'text-success-500', bg: 'bg-success-50 dark:bg-success-50/10' },
+          { icon: Pill, label: 'Active Rx', value: rxCount || '0', sub: 'All on track', color: 'text-warning-500', bg: 'bg-warning-50 dark:bg-warning-50/10' },
         ].map((s, i) => (
           <motion.div key={s.label} {...fadeIn(i + 2)}>
             <Card className="p-5" hover>
@@ -79,7 +104,11 @@ export default function PatientDashboard() {
               <button onClick={() => router.push('/patient/appointments')} className="text-xs font-medium text-primary-500 hover:underline flex items-center gap-1">View all <ArrowRight size={12} /></button>
             </div>
             <div className="divide-y divide-surface-100 dark:divide-surface-800">
-              {myAppts.slice(0, 3).map(a => (
+              {loading ? (
+                <div className="px-6 py-8 text-center"><Loader2 size={20} className="animate-spin text-surface-400 mx-auto" /></div>
+              ) : upcoming.length === 0 ? (
+                <div className="px-6 py-8 text-center text-surface-400 text-sm">No upcoming appointments.</div>
+              ) : upcoming.slice(0, 3).map(a => (
                 <div key={a.id} className="px-6 py-4 flex items-center gap-4">
                   <Avatar name={a.doctorName} />
                   <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-surface-800 dark:text-white truncate">{a.doctorName}</p><p className="text-xs text-surface-400">{a.specialty} — {a.type}</p></div>
@@ -95,7 +124,7 @@ export default function PatientDashboard() {
           <Card>
             <div className="px-6 py-4 border-b border-surface-100 dark:border-surface-800"><h3 className="font-semibold text-surface-900 dark:text-white">Recent Activity</h3></div>
             <div className="px-6 py-3 space-y-4">
-              {activityTimeline.slice(0, 5).map(item => (
+              {timeline.slice(0, 5).map(item => (
                 <div key={item.id} className="flex gap-3">
                   <div className="w-8 h-8 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center shrink-0 mt-0.5"><Activity size={14} className="text-surface-400" /></div>
                   <div><p className="text-sm font-medium text-surface-700 dark:text-surface-200">{item.title}</p><p className="text-xs text-surface-400">{item.time}</p></div>
@@ -118,7 +147,7 @@ export default function PatientDashboard() {
                 <FileText size={18} className="text-primary-500 mb-2" />
                 <p className="text-sm font-semibold text-surface-800 dark:text-white truncate">{r.name}</p>
                 <p className="text-xs text-surface-400 mt-1">{r.date}</p>
-                <Badge variant="success" className="mt-2">Ready</Badge>
+                <Badge variant={r.status === 'ready' ? 'success' : 'warning'} className="mt-2">{r.status}</Badge>
               </div>
             ))}
           </div>

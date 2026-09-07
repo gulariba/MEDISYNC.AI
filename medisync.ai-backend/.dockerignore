@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+.env
+.env.*
+!.env.example
+*.log
+logs/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+test_*.py
+tests/
+
+# Development
+requirements-dev.txt
+start.sh
+start.bat
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# Node (if any frontend added later)
+node_modules/
+npm-debug.log

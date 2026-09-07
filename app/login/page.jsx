@@ -6,15 +6,40 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui/input';
 import Button from '@/components/ui/button';
-import { Eye, EyeOff, Stethoscope, Shield, User } from 'lucide-react';
+import { Eye, EyeOff, Stethoscope, Shield, User, Loader2 } from 'lucide-react';
 
 export default function Login() {
   const [showPw, setShowPw] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const { login, loginAs } = useAuth();
   const router = useRouter();
 
-  const handleSubmit = (e) => { e.preventDefault(); login('demo@medisync.ai', 'demo'); router.push('/patient'); };
-  const demoAs = (role) => { loginAs(role); router.push(`/${role}`); };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) { setError('Please enter email and password'); return; }
+    setBusy(true); setError('');
+    try {
+      const res = await login(email, password);
+      router.push(`/${res.role}`);
+    } catch (err) {
+      setError(err.message || 'Login failed');
+    }
+    setBusy(false);
+  };
+
+  const demoAs = async (role) => {
+    setBusy(true); setError('');
+    try {
+      await loginAs(role);
+      router.push(`/${role}`);
+    } catch (err) {
+      setError(err.message || 'Demo login failed');
+    }
+    setBusy(false);
+  };
 
   return (
     <div className="min-h-screen flex">
@@ -45,10 +70,16 @@ export default function Login() {
           <h1 className="text-2xl font-extrabold text-surface-900 dark:text-white tracking-tight">Welcome back</h1>
           <p className="text-sm text-surface-500 dark:text-surface-400 mt-1 mb-8">Sign in to access your healthcare dashboard.</p>
 
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-xl bg-danger-50 dark:bg-danger-50/10 border border-danger-500/20 text-sm text-danger-600 dark:text-danger-400">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Email" type="email" placeholder="you@example.com" defaultValue="demo@medisync.ai" />
+            <Input label="Email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
             <div className="relative">
-              <Input label="Password" type={showPw ? 'text' : 'password'} placeholder="Enter your password" defaultValue="demo" />
+              <Input label="Password" type={showPw ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-[34px] p-1 text-surface-400 hover:text-surface-600">
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -59,7 +90,9 @@ export default function Login() {
               </label>
               <Link href="/forgot-password" className="text-primary-500 font-medium hover:underline">Forgot password?</Link>
             </div>
-            <Button type="submit" size="lg" className="w-full">Sign In</Button>
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
+              {busy ? <><Loader2 size={16} className="animate-spin" /> Signing in...</> : 'Sign In'}
+            </Button>
           </form>
 
           <div className="my-6 flex items-center gap-3">
@@ -74,7 +107,7 @@ export default function Login() {
               { role: 'doctor', icon: Stethoscope, label: 'Doctor' },
               { role: 'admin', icon: Shield, label: 'Admin' },
             ].map(d => (
-              <button key={d.role} onClick={() => demoAs(d.role)} className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/60 transition-colors group">
+              <button key={d.role} onClick={() => demoAs(d.role)} disabled={busy} className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/60 transition-colors group disabled:opacity-50">
                 <d.icon size={18} className="text-surface-400 group-hover:text-primary-500 transition-colors" />
                 <span className="text-xs font-medium text-surface-600 dark:text-surface-400">{d.label}</span>
               </button>
